@@ -1,0 +1,119 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Create an RDS MySQL instance.",
+    "Parameters": {
+      "BlogRdsSecurityGroupId": {
+        "Default": "/AcmeLabs/Blog/Vpc/RdsSecurityGroup/Id",
+        "Type": "AWS::SSM::Parameter::Value<String>",
+        "Description": "The security group ID for the RDS instance."
+      },
+      "BlogPrivateSubnet1Id": {
+        "Default": "/AcmeLabs/Blog/Vpc/PrivateSubnet1/Id",
+        "Type": "AWS::SSM::Parameter::Value<String>",
+        "Description": "The first private subnet ID for the RDS instance."
+      },
+      "BlogPrivateSubnet2Id": {
+        "Default": "/AcmeLabs/Blog/Vpc/PrivateSubnet2/Id",
+        "Type": "AWS::SSM::Parameter::Value<String>",
+        "Description": "The second private subnet ID for the RDS instance."
+      }
+    },
+    "Resources": {
+      "RDSDBInstance": {
+        "DeletionPolicy": "Snapshot",
+        "Type": "AWS::RDS::DBInstance",
+        "Properties": {
+          "DBSubnetGroupName": {
+            "Ref": "RDSDBSubnetGroup"
+          },
+          "StorageType": "gp3",
+          "DBInstanceIdentifier": "acmelabs-blog-mysql1",
+          "DBInstanceClass": "db.t4g.micro",
+          "Engine": "mysql",
+          "MasterUsername": {
+            "Fn::Sub": "{{resolve:secretsmanager:AcmeLabsBlogRDSMySQL1:SecretString:username}}"
+          },
+          "BackupRetentionPeriod": 7,
+          "MonitoringInterval": 0,
+          "StorageEncrypted": true,
+          "KmsKeyId": "alias/aws/rds",
+          "DBName": "toontown",
+          "MasterUserPassword": {
+            "Fn::Sub": "{{resolve:secretsmanager:AcmeLabsBlogRDSMySQL1:SecretString:password}}"
+          },
+          "VPCSecurityGroups": [
+            {
+              "Ref": "BlogRdsSecurityGroupId"
+            }
+          ],
+          "AllocatedStorage": 20,
+          "Tags": [
+            {
+              "Key": "Name",
+              "Value": "AcmeLabs-Blog-RDS"
+            }
+          ],
+          "EngineVersion": "8.0.41",
+          "PubliclyAccessible": false,
+          "MultiAZ": true
+        }
+      },
+      "RDSDBSubnetGroup": {
+        "Type": "AWS::RDS::DBSubnetGroup",
+        "Properties": {
+          "SubnetIds": [
+            {
+              "Ref": "BlogPrivateSubnet2Id"
+            },
+            {
+              "Ref": "BlogPrivateSubnet1Id"
+            }
+          ],
+          "DBSubnetGroupDescription": "Subnet group for RDS instance",
+          "DBSubnetGroupName": "AcmeLabsBlogRDSSubnetGroup"
+        }
+      },
+      "SSMBlogRDSDBInstanceEndpoint": {
+        "Type": "AWS::SSM::Parameter",
+        "Properties": {
+          "Name": "/AcmeLabs/Blog/Rds/DBInstance/Endpoint",
+          "Type": "String",
+          "Value": {
+            "Fn::GetAtt": [
+              "RDSDBInstance",
+              "Endpoint.Address"
+            ]
+          },
+          "Tier": "Standard"
+        }
+      },
+      "SSMBlogRDSDBInstanceId": {
+        "Type": "AWS::SSM::Parameter",
+        "Properties": {
+          "Name": "/AcmeLabs/Blog/Rds/DBInstance/Id",
+          "Type": "String",
+          "Value": {
+            "Ref": "RDSDBInstance"
+          },
+          "Tier": "Standard"
+        }
+      }
+    },
+    "Outputs": {
+      "BlogRDSDBInstanceEndpoint": {
+        "Value": {
+          "Fn::GetAtt": [
+            "RDSDBInstance",
+            "Endpoint.Address"
+          ]
+        },
+        "Description": "The endpoint of the RDS instance."
+      },
+      "BlogRDSDBInstanceId": {
+        "Value": {
+          "Ref": "RDSDBInstance"
+        },
+        "Description": "The ID of the RDS DB instance."
+      }
+    }
+  }

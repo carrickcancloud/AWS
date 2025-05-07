@@ -1,0 +1,254 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Create a Launch Template, Auto Scaling Group, and Target Tracking Policy for AcmeLabs Cloud.",
+  "Parameters": {
+    "BlogAutoScalingGroupName": {
+      "Default": "AcmeLabs-Blog-ASG",
+      "Type": "String",
+      "Description": "Name of the Auto Scaling Group."
+    },
+    "BlogImageId": {
+      "Default": "/AcmeLabs/Blog/Ami/Ubuntu24/Id",
+      "Type": "String",
+      "Description": "SSM Parameter path for the AMI ID."
+    },
+    "BlogIamInstanceProfile": {
+      "Default": "/AcmeLabs/Blog/Iam/Ec2/Role/InstanceProfile/Name",
+      "Type": "String",
+      "Description": "SSM Parameter path for the IAM instance profile."
+    },
+    "BlogInstanceType": {
+      "Default": "t2.micro",
+      "Type": "String",
+      "Description": "Instance type for the Launch Template."
+    },
+    "BlogKeyName": {
+      "Default": "/AcmeLabs/Blog/KeyPair/Name",
+      "Type": "String",
+      "Description": "SSM Parameter path for the Key Pair name."
+    },
+    "BlogLaunchTemplateName": {
+      "Default": "AcmeLabs-Blog-LT",
+      "Type": "String",
+      "Description": "Name of the Launch Template."
+    },
+    "BlogLaunchTemplateVersionDescription": {
+      "Default": "Initial version",
+      "Type": "String",
+      "Description": "Description for the Launch Template version."
+    },
+    "BlogMaxSize": {
+      "Default": 6,
+      "Type": "Number",
+      "Description": "Maximum size of the Auto Scaling Group."
+    },
+    "BlogMinSize": {
+      "Default": 2,
+      "Type": "Number",
+      "Description": "Minimum size of the Auto Scaling Group."
+    },
+    "BlogSecurityGroupId": {
+      "Default": "/AcmeLabs/Blog/Vpc/Ec2SecurityGroup/Id",
+      "Type": "String",
+      "Description": "SSM Parameter path for the EC2 Security Group ID."
+    },
+    "BlogSubnet1Id": {
+      "Default": "/AcmeLabs/Blog/Vpc/PublicSubnet1/Id",
+      "Type": "String",
+      "Description": "SSM Parameter path for Subnet 1 ID."
+    },
+    "BlogSubnet2Id": {
+      "Default": "/AcmeLabs/Blog/Vpc/PublicSubnet2/Id",
+      "Type": "String",
+      "Description": "SSM Parameter path for Subnet 2 ID."
+    },
+    "BlogTargetGroupArn": {
+      "Default": "/AcmeLabs/Blog/Alb/TargetGroup/Arn",
+      "Type": "String",
+      "Description": "SSM Parameter path for the Target Group ARN."
+    }
+  },
+  "Resources": {
+    "BlogLaunchTemplate": {
+      "Type": "AWS::EC2::LaunchTemplate",
+      "Properties": {
+        "LaunchTemplateData": {
+          "KeyName": {
+            "Fn::Sub": "{{resolve:ssm:${BlogKeyName}}}"
+          },
+          "IamInstanceProfile": {
+            "Name": {
+              "Fn::Sub": "{{resolve:ssm:${BlogIamInstanceProfile}}}"
+            }
+          },
+          "ImageId": {
+            "Fn::Sub": "{{resolve:ssm:${BlogImageId}}}"
+          },
+          "InstanceType": {
+            "Ref": "BlogInstanceType"
+          },
+          "NetworkInterfaces": [
+            {
+              "DeviceIndex": 0,
+              "SubnetId": {
+                "Fn::Sub": "{{resolve:ssm:${BlogSubnet1Id}}}"
+              },
+              "AssociatePublicIpAddress": false,
+              "Groups": [
+                {
+                  "Fn::Sub": "{{resolve:ssm:${BlogSecurityGroupId}}}"
+                }
+              ]
+            }
+          ],
+          "TagSpecifications": [
+            {
+              "ResourceType": "instance",
+              "Tags": [
+                {
+                  "Key": "Name",
+                  "Value": "AcmeLabs-Blog-Web"
+                }
+              ]
+            }
+          ],
+          "UserData": {
+            "Fn::Base64": {
+              "Fn::Join": [
+                "",
+                [
+                  "#!/bin/bash\n",
+                  "exec > /var/log/user-data.log 2>&1\n",
+                  "\n",
+                  "echo \"Starting User-Data script...\"\n",
+                  "echo \"Checking internet connectivity...\"\n",
+                  "for i in {1..10}; do\n",
+                  "    if curl -s --head --request GET http://www.google.com | grep \"200 OK\" > /dev/null; then\n",
+                  "        echo \"Internet is available.\"\n",
+                  "        break\n",
+                  "    fi\n",
+                  "    echo \"Waiting for internet connectivity...\"\n",
+                  "    sleep 10\n",
+                  "done\n",
+                  "\n",
+                  "echo \"Retrieving instance ID...\"\n",
+                  "INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)\n",
+                  "echo \"Instance ID: $INSTANCE_ID\"\n",
+                  "\n",
+                  "echo \"Retrieving bucket name from SSM...\"\n",
+                  "BUCKET_NAME=$(aws ssm get-parameter --name \"/AcmeLabs/Blog/Ami/S3/Bucket/Name\" --query \"Parameter.Value\" --output text)\n",
+                  "echo \"Bucket Name: $BUCKET_NAME\"\n",
+                  "\n",
+                  "echo \"Running startup script...\"\n",
+                  "aws s3 cp s3://$BUCKET_NAME/scripts/asg-startup-script.sh /tmp/startup-script.sh\n",
+                  "chmod +x /tmp/startup-script.sh\n",
+                  "echo \"User-Data script completed successfully.\"\n",
+                  "/tmp/startup-script.sh\n"
+                ]
+              ]
+            }
+          }
+        },
+        "LaunchTemplateName": {
+          "Ref": "BlogLaunchTemplateName"
+        },
+        "VersionDescription": {
+          "Ref": "BlogLaunchTemplateVersionDescription"
+        }
+      }
+    },
+    "BlogAutoScalingGroup": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "Properties": {
+        "AutoScalingGroupName": {
+          "Ref": "BlogAutoScalingGroupName"
+        },
+        "LaunchTemplate": {
+          "LaunchTemplateName": {
+            "Ref": "BlogLaunchTemplateName"
+          },
+          "Version": "1"
+        },
+        "MaxSize": {
+          "Ref": "BlogMaxSize"
+        },
+        "MinSize": {
+          "Ref": "BlogMinSize"
+        },
+        "TargetGroupARNs": [
+          {
+            "Fn::Sub": "{{resolve:ssm:${BlogTargetGroupArn}}}"
+          }
+        ],
+        "VPCZoneIdentifier": [
+          {
+            "Fn::Sub": "{{resolve:ssm:${BlogSubnet1Id}}}"
+          },
+          {
+            "Fn::Sub": "{{resolve:ssm:${BlogSubnet2Id}}}"
+          }
+        ]
+      }
+    },
+    "BlogTargetTrackingPolicy": {
+      "DependsOn": "BlogAutoScalingGroup",
+      "Type": "AWS::AutoScaling::ScalingPolicy",
+      "Properties": {
+        "AutoScalingGroupName": {
+          "Ref": "BlogAutoScalingGroupName"
+        },
+        "PolicyName": "ScaleUp",
+        "PolicyType": "TargetTrackingScaling",
+        "TargetTrackingConfiguration": {
+          "DisableScaleIn": false,
+          "PredefinedMetricSpecification": {
+            "PredefinedMetricType": "ASGAverageCPUUtilization"
+          },
+          "TargetValue": 50
+        }
+      }
+    },
+    "BlogLaunchTemplateParameter": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/LaunchTemplate/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "BlogLaunchTemplate"
+        },
+        "Tier": "Standard"
+      }
+    },
+    "BlogAutoScalingGroupParameter": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/AutoScalingGroup/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "BlogAutoScalingGroup"
+        },
+        "Tier": "Standard"
+      }
+    }
+  },
+  "Outputs": {
+    "BlogAutoScalingGroupId": {
+      "Value": {
+        "Ref": "BlogAutoScalingGroup"
+      },
+      "Export": {
+        "Name": "BlogAutoScalingGroupId"
+      },
+      "Description": "The ID of the Auto Scaling Group."
+    },
+    "BlogLaunchTemplateId": {
+      "Value": {
+        "Ref": "BlogLaunchTemplate"
+      },
+      "Export": {
+        "Name": "BlogLaunchTemplateId"
+      },
+      "Description": "The ID of the Launch Template."
+    }
+  }
+}

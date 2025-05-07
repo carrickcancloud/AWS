@@ -1,0 +1,40 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Create Route 53 records for AcmeLabs.",
+  "Parameters": {
+    "BlogHostedZoneId": {
+      "Type": "String",
+      "Default": "/AcmeLabs/Blog/Route53/HostedZone/Id"
+    },
+    "BlogALBDnsName": {
+      "Type": "String",
+      "Default": "/AcmeLabs/Blog/Alb/Dns/Name"
+    }
+  },
+  "Resources": {
+    "ARecord": {
+      "Type": "AWS::Route53::RecordSet",
+      "Properties": {
+        "HostedZoneId": {
+          "Fn::Sub": "{{resolve:ssm:${BlogHostedZoneId}}}"
+        },
+        "Name": "blog.acmelabs.cloud",
+        "Type": "A",
+        "AliasTarget": {
+          "DNSName": {
+            "Fn::Sub": "{{resolve:ssm:${BlogALBDnsName}}}"
+          },
+          "HostedZoneId": "Z35SXDOTRQ7X7K"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "ARecordOutput": {
+      "Description": "A record for acmelabs.cloud",
+      "Value": {
+        "Ref": "ARecord"
+      }
+    }
+  }
+}

@@ -1,0 +1,151 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Create an EFS for Private Subnets and output SSM parameters.",
+  "Parameters": {
+    "BlogVpcId": {
+      "Default": "/AcmeLabs/Blog/Vpc/Id",
+      "Type": "AWS::SSM::Parameter::Value<String>"
+    },
+    "BlogEc2SecurityGroupId": {
+      "Default": "/AcmeLabs/Blog/Vpc/Ec2SecurityGroup/Id",
+      "Type": "AWS::SSM::Parameter::Value<String>",
+      "Description": "The ID of the EC2 Security Group."
+    },
+    "BlogEfsName": {
+      "Default": "AcmeLabs-Blog-EFS",
+      "Type": "String",
+      "Description": "The name for the EFS file system."
+    },
+    "BlogTransitionToIa": {
+      "Default": "AFTER_7_DAYS",
+      "Type": "String",
+      "Description": "Lifecycle transition policy for Infrequent Access."
+    },
+    "BlogPerformanceMode": {
+      "Description": "The performance mode for the EFS file system.",
+      "Type": "String",
+      "AllowedValues": [
+        "generalPurpose",
+        "maxIO"
+      ],
+      "Default": "generalPurpose"
+    },
+    "BlogPrivateSubnet2Id": {
+      "Default": "/AcmeLabs/Blog/Vpc/PrivateSubnet2/Id",
+      "Type": "AWS::SSM::Parameter::Value<String>"
+    },
+    "BlogPrivateSubnet1Id": {
+      "Default": "/AcmeLabs/Blog/Vpc/PrivateSubnet1/Id",
+      "Type": "AWS::SSM::Parameter::Value<String>"
+    }
+  },
+  "Outputs": {
+    "BlogEFSMountTarget2Id": {
+      "Value": {
+        "Ref": "EFSMountTarget2"
+      },
+      "Description": "The ID of the second EFS mount target."
+    },
+    "BlogEFSFileSystemId": {
+      "Value": {
+        "Ref": "EFSFileSystem"
+      },
+      "Description": "The ID of the EFS file system."
+    },
+    "BlogEFSMountTarget1Id": {
+      "Value": {
+        "Ref": "EFSMountTarget1"
+      },
+      "Description": "The ID of the first EFS mount target."
+    }
+  },
+  "Resources": {
+    "EFSMountTarget2": {
+      "Type": "AWS::EFS::MountTarget",
+      "Properties": {
+        "SecurityGroups": [
+          {
+            "Ref": "BlogEc2SecurityGroupId"
+          }
+        ],
+        "FileSystemId": {
+          "Ref": "EFSFileSystem"
+        },
+        "SubnetId": {
+          "Ref": "BlogPrivateSubnet2Id"
+        }
+      }
+    },
+    "SSMBlogMountTarget1Id": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Efs/Mount/1/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "EFSMountTarget1"
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogMountTarget2Id": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Efs/Mount/2/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "EFSMountTarget2"
+        },
+        "Tier": "Standard"
+      }
+    },
+    "EFSFileSystem": {
+      "Type": "AWS::EFS::FileSystem",
+      "Properties": {
+        "PerformanceMode": {
+          "Ref": "BlogPerformanceMode"
+        },
+        "LifecyclePolicies": [
+          {
+            "TransitionToIa": {
+              "Ref": "BlogTransitionToIa"
+            }
+          }
+        ],
+        "Encrypted": true,
+        "FileSystemTags": [
+          {
+            "Key": "Name",
+            "Value": "AcmeLabs-Blog-EFS"
+          }
+        ]
+      }
+    },
+    "EFSMountTarget1": {
+      "Type": "AWS::EFS::MountTarget",
+      "Properties": {
+        "SecurityGroups": [
+          {
+            "Ref": "BlogEc2SecurityGroupId"
+          }
+        ],
+        "FileSystemId": {
+          "Ref": "EFSFileSystem"
+        },
+        "SubnetId": {
+          "Ref": "BlogPrivateSubnet1Id"
+        }
+      }
+    },
+    "SSMBlogEfsId": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Efs/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "EFSFileSystem"
+        },
+        "Tier": "Standard"
+      }
+    }
+  }
+}

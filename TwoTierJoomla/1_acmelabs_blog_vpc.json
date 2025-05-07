@@ -1,0 +1,756 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Create a VPC, Subnets, Internet Gateway, NAT Gateway, and Route Tables.",
+  "Parameters": {
+    "BlogAlbSgName": {
+      "Default": "AcmeLabs-Blog-ALB-SG",
+      "Type": "String",
+      "Description": "Name tag for the Load Balancer Security Group."
+    },
+    "BlogEc2SgName": {
+      "Default": "AcmeLabs-Blog-EC2-SG",
+      "Type": "String",
+      "Description": "Name tag for the EC2 Security Group."
+    },
+    "BlogIgwName": {
+      "Default": "AcmeLabs-Blog-IGW",
+      "Type": "String",
+      "Description": "Name tag for the Internet Gateway."
+    },
+    "BlogPrivateSubnet1Cidr": {
+      "Default": "10.11.3.0/24",
+      "Type": "String",
+      "Description": "CIDR block for Private Subnet 1."
+    },
+    "BlogPrivateSubnet1Name": {
+      "Default": "AcmeLabsBlogPrivateSubnet1",
+      "Type": "String",
+      "Description": "Name tag for Private Subnet 1."
+    },
+    "BlogPrivateSubnet2Cidr": {
+      "Default": "10.11.4.0/24",
+      "Type": "String",
+      "Description": "CIDR block for Private Subnet 2."
+    },
+    "BlogPrivateSubnet2Name": {
+      "Default": "AcmeLabsBlogPrivateSubnet2",
+      "Type": "String",
+      "Description": "Name tag for Private Subnet 2."
+    },
+    "BlogPublicSubnet1Cidr": {
+      "Default": "10.11.1.0/24",
+      "Type": "String",
+      "Description": "CIDR block for Public Subnet 1."
+    },
+    "BlogPublicSubnet1Name": {
+      "Default": "AcmeLabsBlogPublicSubnet1",
+      "Type": "String",
+      "Description": "Name tag for Public Subnet 1."
+    },
+    "BlogPublicSubnet2Cidr": {
+      "Default": "10.11.2.0/24",
+      "Type": "String",
+      "Description": "CIDR block for Public Subnet 2."
+    },
+    "BlogPublicSubnet2Name": {
+      "Default": "AcmeLabsBlogPublicSubnet2",
+      "Type": "String",
+      "Description": "Name tag for Public Subnet 2."
+    },
+    "BlogVpcCidrBlock": {
+      "Default": "10.11.0.0/16",
+      "Type": "String",
+      "Description": "CIDR block for the VPC."
+    },
+    "BlogVpcName": {
+      "Default": "AcmeLabs-Blog-VPC",
+      "Type": "String",
+      "Description": "Name tag for the VPC."
+    },
+    "BlogRdsSgName": {
+      "Default": "AcmeLabs-Blog-RDS-SG",
+      "Type": "String",
+      "Description": "Name tag for the RDS Security Group."
+    }
+  },
+  "Resources": {
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "BlogIgwName"
+            }
+          }
+        ]
+      }
+    },
+    "AttachInternetGateway": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "InternetGatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "VPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": {
+          "Ref": "BlogVpcCidrBlock"
+        },
+        "EnableDnsSupport": true,
+        "EnableDnsHostnames": true,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "BlogVpcName"
+            }
+          }
+        ]
+      }
+    },
+    "BlogPublicSubnet1": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": {
+          "Ref": "BlogPublicSubnet1Cidr"
+        },
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            0,
+            {
+              "Fn::GetAZs": "us-east-1"
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "BlogPublicSubnet1Name"
+            }
+          }
+        ]
+      }
+    },
+    "BlogPublicSubnet2": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": {
+          "Ref": "BlogPublicSubnet2Cidr"
+        },
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            1,
+            {
+              "Fn::GetAZs": "us-east-1"
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "BlogPublicSubnet2Name"
+            }
+          }
+        ]
+      }
+    },
+    "BlogPrivateSubnet1": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": {
+          "Ref": "BlogPrivateSubnet1Cidr"
+        },
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            0,
+            {
+              "Fn::GetAZs": "us-east-1"
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "BlogPrivateSubnet1Name"
+            }
+          }
+        ]
+      }
+    },
+    "BlogPrivateSubnet2": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": {
+          "Ref": "BlogPrivateSubnet2Cidr"
+        },
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            1,
+            {
+              "Fn::GetAZs": "us-east-1"
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "BlogPrivateSubnet2Name"
+            }
+          }
+        ]
+      }
+    },
+    "NATGatewayEIP": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "Domain": "vpc"
+      }
+    },
+    "BlogNatGateway": {
+      "Type": "AWS::EC2::NatGateway",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "BlogPublicSubnet2"
+        },
+        "AllocationId": {
+          "Fn::GetAtt": [
+            "NATGatewayEIP",
+            "AllocationId"
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "AcmeLabs-Blog-NATGW"
+          }
+        ]
+      }
+    },
+    "PublicRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "PublicRouteTable"
+          }
+        ]
+      }
+    },
+    "PublicDefaultRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        },
+        "GatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "PrivateRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "PrivateRouteTable"
+          }
+        ]
+      }
+    },
+    "PrivateDefaultRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "RouteTableId": {
+          "Ref": "PrivateRouteTable"
+        },
+        "NatGatewayId": {
+          "Ref": "BlogNatGateway"
+        }
+      }
+    },
+    "AssociatePublicRouteTable1": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "BlogPublicSubnet1"
+        },
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        }
+      }
+    },
+    "AssociatePublicRouteTable2": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "BlogPublicSubnet2"
+        },
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        }
+      }
+    },
+    "AssociatePrivateRouteTable1": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "BlogPrivateSubnet1"
+        },
+        "RouteTableId": {
+          "Ref": "PrivateRouteTable"
+        }
+      }
+    },
+    "AssociatePrivateRouteTable2": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "BlogPrivateSubnet2"
+        },
+        "RouteTableId": {
+          "Ref": "PrivateRouteTable"
+        }
+      }
+    },
+    "BlogAlbSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group for the Load Balancer.",
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "GroupName": {
+          "Ref": "BlogAlbSgName"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "BlogAlbSgName"
+            }
+          }
+        ]
+      }
+    },
+    "BlogEc2SG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group for our web server EC2 instances.",
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "GroupName": {
+          "Ref": "BlogEc2SgName"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "BlogEc2SgName"
+            }
+          }
+        ]
+      }
+    },
+    "RdsSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group for RDS instances.",
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "GroupName": {
+          "Ref": "BlogRdsSgName"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "BlogRdsSgName"
+            }
+          }
+        ]
+      }
+    },
+    "AllowHttpFromAlb": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "SourceSecurityGroupId": {
+          "Ref": "BlogAlbSG"
+        },
+        "GroupId": {
+          "Ref": "BlogEc2SG"
+        },
+        "FromPort": 80,
+        "ToPort": 80,
+        "IpProtocol": "tcp"
+      }
+    },
+    "AllowNfsFromEc2" : {
+      "Type" : "AWS::EC2::SecurityGroupIngress",
+      "Properties" : {
+        "SourceSecurityGroupId" : {
+          "Ref" : "BlogEc2SG"
+        },
+        "GroupId" : {
+          "Ref" : "BlogEc2SG"
+        },
+        "FromPort" : 2049,
+        "ToPort" : 2049,
+        "IpProtocol" : "tcp"
+      }
+    },
+    "AllowHttpFromAnywhere": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "IpProtocol": "tcp",
+        "GroupId": {
+          "Ref": "BlogAlbSG"
+        },
+        "FromPort": 80,
+        "CidrIp": "0.0.0.0/0",
+        "ToPort": 80
+      }
+    },
+    "AllowHttpsFromAnywhere": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "ToPort": 443,
+        "GroupId": {
+          "Ref": "BlogAlbSG"
+        },
+        "FromPort": 443,
+        "CidrIp": "0.0.0.0/0",
+        "IpProtocol": "tcp"
+      }
+    },
+    "AllowMysqlFromEc2": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "SourceSecurityGroupId": {
+          "Ref": "BlogEc2SG"
+        },
+        "GroupId": {
+          "Ref": "RdsSG"
+        },
+        "FromPort": 3306,
+        "ToPort": 3306,
+        "IpProtocol": "tcp"
+      }
+    },
+    "AllowMysqlFromRds": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "SourceSecurityGroupId": {
+          "Ref": "RdsSG"
+        },
+        "GroupId": {
+          "Ref": "BlogEc2SG"
+        },
+        "FromPort": 3306,
+        "ToPort": 3306,
+        "IpProtocol": "tcp"
+      }
+    },
+    "AllowOutboundDefaultEc2": {
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "ToPort": 65535,
+        "GroupId": {
+          "Ref": "BlogEc2SG"
+        },
+        "FromPort": 0,
+        "CidrIp": "0.0.0.0/0",
+        "IpProtocol": "-1"
+      }
+    },
+    "AllowOutboundDefaultRds": {
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "ToPort": 65535,
+        "GroupId": {
+          "Ref": "RdsSG"
+        },
+        "FromPort": 0,
+        "CidrIp": "0.0.0.0/0",
+        "IpProtocol": "-1"
+      }
+    },
+    "SSMBlogAlbSecurityGroupId": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Vpc/AlbSecurityGroup/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "BlogAlbSG"
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogEc2SecurityGroupId": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Vpc/Ec2SecurityGroup/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "BlogEc2SG"
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogInternetGatewayId": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Vpc/InternetGateway/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "InternetGateway"
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogNatGatewayId": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Vpc/NatGateway/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "BlogNatGateway"
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogPrivateSubnet1Id": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Vpc/PrivateSubnet1/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "BlogPrivateSubnet1"
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogPrivateSubnet2Id": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Vpc/PrivateSubnet2/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "BlogPrivateSubnet2"
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogPublicSubnet1Id": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Vpc/PublicSubnet1/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "BlogPublicSubnet1"
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogPublicSubnet2Id": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Vpc/PublicSubnet2/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "BlogPublicSubnet2"
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogRdsSecurityGroupId": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Vpc/RdsSecurityGroup/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "RdsSG"
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogPublicRouteTableId": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Vpc/PublicRouteTable/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "PublicRouteTable"
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogPrivateRouteTableId": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Vpc/PrivateRouteTable/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "PrivateRouteTable"
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogVPCId": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Vpc/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "VPC"
+        },
+        "Tier": "Standard"
+      }
+    }
+  },
+  "Outputs": {
+    "BlogAlbSecurityGroupId": {
+      "Value": {
+        "Ref": "BlogAlbSG"
+      },
+      "Description": "Load Balancer Security Group ID",
+      "Export": {
+        "Name": "BlogAlbSecurityGroupId"
+      }
+    },
+    "BlogEc2SecurityGroupId": {
+      "Value": {
+        "Ref": "BlogEc2SG"
+      },
+      "Description": "Web EC2 Security Group ID",
+      "Export": {
+        "Name": "BlogEc2SecurityGroupId"
+      }
+    },
+    "BlogInternetGatewayId": {
+      "Value": {
+        "Ref": "InternetGateway"
+      },
+      "Description": "Internet Gateway ID",
+      "Export": {
+        "Name": "BlogInternetGatewayId"
+      }
+    },
+    "BlogNatGatewayId": {
+      "Value": {
+        "Ref": "BlogNatGateway"
+      },
+      "Description": "NAT Gateway ID",
+      "Export": {
+        "Name": "BlogNatGatewayId"
+      }
+    },
+    "BlogPrivateSubnet1Id": {
+      "Value": {
+        "Ref": "BlogPrivateSubnet1"
+      },
+      "Description": "Private Subnet 1 ID",
+      "Export": {
+        "Name": "BlogPrivateSubnet1Id"
+      }
+    },
+    "BlogPrivateSubnet2Id": {
+      "Value": {
+        "Ref": "BlogPrivateSubnet2"
+      },
+      "Description": "Private Subnet 2 ID",
+      "Export": {
+        "Name": "BlogPrivateSubnet2Id"
+      }
+    },
+    "BlogPublicSubnet1Id": {
+      "Value": {
+        "Ref": "BlogPublicSubnet1"
+      },
+      "Description": "Public Subnet 1 ID",
+      "Export": {
+        "Name": "BlogPublicSubnet1Id"
+      }
+    },
+    "BlogPublicSubnet2Id": {
+      "Value": {
+        "Ref": "BlogPublicSubnet2"
+      },
+      "Description": "Public Subnet 2 ID",
+      "Export": {
+        "Name": "BlogPublicSubnet2Id"
+      }
+    },
+    "BlogRdsSecurityGroupId": {
+      "Value": {
+        "Ref": "RdsSG"
+      },
+      "Description": "RDS Security Group ID",
+      "Export": {
+        "Name": "BlogRdsSecurityGroupId"
+      }
+    },
+    "BlogPublicRouteTableId": {
+      "Value": {
+        "Ref": "PublicRouteTable"
+      },
+      "Description": "Public Route Table ID",
+      "Export": {
+        "Name": "BlogPublicRouteTableId"
+      }
+    },
+    "BlogPrivateRouteTableId": {
+      "Value": {
+        "Ref": "PrivateRouteTable"
+      },
+      "Description": "Private Route Table ID",
+      "Export": {
+        "Name": "BlogPrivateRouteTableId"
+      }
+    },
+    "BlogVPCId": {
+      "Value": {
+        "Ref": "VPC"
+      },
+      "Description": "VPC ID",
+      "Export": {
+        "Name": "BlogVPCId"
+      }
+    }
+  }
+}

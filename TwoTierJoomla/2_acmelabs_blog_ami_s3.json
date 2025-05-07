@@ -1,0 +1,49 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Create S3 bucket and output its name.",
+  "Parameters": {
+    "BlogBucketName": {
+      "Default": "acmelabs-blog-ami-2025",
+      "Type": "String",
+      "Description": "Bucket name."
+    }
+  },
+  "Resources": {
+    "S3Bucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": {
+          "Ref": "BlogBucketName"
+        }
+      }
+    },
+    "SSMBlogS3BucketParameter": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Ami/S3/Bucket/Name",
+        "Type": "String",
+        "Value": {
+          "Ref": "S3Bucket"
+        },
+        "Tier": "Standard"
+      }
+    }
+  },
+  "Outputs": {
+    "BlogBucketArnOutput": {
+      "Description": "The ARN of the created S3 bucket.",
+      "Value": {
+        "Fn::GetAtt": [
+          "S3Bucket",
+          "Arn"
+        ]
+      }
+    },
+    "BlogBucketNameOutput": {
+      "Description": "Bucket name.",
+      "Value": {
+        "Ref": "S3Bucket"
+      }
+    }
+  }
+}
