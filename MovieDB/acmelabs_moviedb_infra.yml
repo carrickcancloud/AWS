@@ -1,0 +1,316 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AcmeLabs MovieDB
+
+Parameters:
+  AcmeLabsMovieDBAmiId:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /AcmeLabs/MovieDB/Ami/Ubuntu24.x/Latest/ID
+
+  AcmeLabsMovieDBKeyName:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /AcmeLabs/MovieDB/KeyPair/Name
+
+Resources:
+  AcmeLabsMovieDBVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.10.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: AcmeLabsMovieDB-VPC
+
+  AcmeLabsMovieDBInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: AcmeLabsMovieDB-IGW
+
+  AcmeLabsMovieDBVPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref AcmeLabsMovieDBVPC
+      InternetGatewayId: !Ref AcmeLabsMovieDBInternetGateway
+
+  AcmeLabsMovieDBPublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AcmeLabsMovieDBVPC
+      CidrBlock: 10.10.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: AcmeLabsMovieDB-Public-Subnet
+
+  AcmeLabsMovieDBPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref AcmeLabsMovieDBVPC
+      Tags:
+        - Key: Name
+          Value: AcmeLabsMovieDB-Public-RT
+
+  AcmeLabsMovieDBPublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref AcmeLabsMovieDBPublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref AcmeLabsMovieDBInternetGateway
+
+  AcmeLabsMovieDBPublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref AcmeLabsMovieDBPublicSubnet
+      RouteTableId: !Ref AcmeLabsMovieDBPublicRouteTable
+
+  AcmeLabsMovieDBEC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH access from anywhere
+      VpcId: !Ref AcmeLabsMovieDBVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: AcmeLabsMovieDBEC2-SG
+
+  AcmeLabsMovieDBEC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AcmeLabsMovieDBEC2Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: DynamoDBReadOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Scan
+                  - dynamodb:Query
+                Resource: !GetAtt AcmeLabsMovieDBTable.Arn
+      Tags:
+        - Key: Name
+          Value: AcmeLabsMovieDBEC2Role
+
+  AcmeLabsMovieDBEC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref AcmeLabsMovieDBEC2Role
+
+  AcmeLabsMovieDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: TopMovies
+      AttributeDefinitions:
+        - AttributeName: MovieID
+          AttributeType: S
+      KeySchema:
+        - AttributeName: MovieID
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      Tags:
+        - Key: Name
+          Value: AcmeLabsMovieDB-DDBTable
+
+  AcmeLabsMovieDBInstance:
+    Type: AWS::EC2::Instance
+    DependsOn: 
+      - AcmeLabsMovieDBVPCGatewayAttachment
+      - AcmeLabsMovieDBPublicSubnet
+      - AcmeLabsMovieDBTable
+      - AcmeLabsMovieDBEC2SecurityGroup
+      - AcmeLabsMovieDBEC2InstanceProfile
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !Ref AcmeLabsMovieDBAmiId
+      IamInstanceProfile: !Ref AcmeLabsMovieDBEC2InstanceProfile
+      KeyName: !Ref AcmeLabsMovieDBKeyName
+      SecurityGroupIds:
+        - !Ref AcmeLabsMovieDBEC2SecurityGroup
+      SubnetId: !Ref AcmeLabsMovieDBPublicSubnet
+      Tags:
+        - Key: Name
+          Value: AcmeLabsMovieDB-EC2
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          exec > /var/log/user-data.log 2>&1
+
+          echo "Starting User-Data script..."
+          echo "Checking internet connectivity..."
+          for i in {1..10}; do
+              if curl -s --head --request GET http://www.google.com | grep "200 OK" > /dev/null; then
+                  echo "Internet is available."
+                  break
+              fi
+              echo "Waiting for internet connectivity..."
+              sleep 10
+          done
+
+          echo "Updating packages and installing dependencies..."
+          apt-get update -y
+          apt-get upgrade -y
+          apt-get autoremove -y
+          apt-get autoclean -y
+          apt-get install -y unzip jq
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+          unzip /tmp/awscliv2.zip -d /tmp
+          /tmp/aws/install
+          rm -rf /tmp/aws /tmp/awscliv2.zip
+          echo "Packages updated and dependencies installed."
+
+          echo "Retrieving instance ID using IMDSv2..."
+          TOKEN=$(curl -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s http://169.254.169.254/latest/api/token)
+          INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
+          if [ -z "$INSTANCE_ID" ]; then
+            echo "Failed to retrieve INSTANCE_ID"
+            exit 1
+          fi
+          echo "Instance ID: $INSTANCE_ID"
+          echo "User-Data script completed successfully."
+
+  AcmeLabsMovieDBLambdaBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: acmelabs-moviedb-lambda-2025
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Name
+          Value: AcmeLabs-MovieDB-Lambda-2025
+
+  AcmeLabsMovieDBVPCParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AcmeLabs/MovieDB/VPC/ID
+      Type: String
+      Value: !Ref AcmeLabsMovieDBVPC
+
+  AcmeLabsMovieDBVPCArnParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AcmeLabs/MovieDB/VPC/ARN
+      Type: String
+      Value: !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${AcmeLabsMovieDBVPC}
+
+  AcmeLabsMovieDBPublicSubnetParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AcmeLabs/MovieDB/PublicSubnet/ID
+      Type: String
+      Value: !Ref AcmeLabsMovieDBPublicSubnet
+
+  AcmeLabsMovieDBPublicSubnetArnParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AcmeLabs/MovieDB/PublicSubnet/ARN
+      Type: String
+      Value: !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${AcmeLabsMovieDBPublicSubnet}
+
+  AcmeLabsMovieDBDynamoDBTableIDParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AcmeLabs/MovieDB/DynamoDB/Table/ID
+      Type: String
+      Value: !Ref AcmeLabsMovieDBTable
+
+  AcmeLabsMovieDBDynamoDBTableArnParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AcmeLabs/MovieDB/DynamoDB/Table/ARN
+      Type: String
+      Value: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/TopMovies
+
+  AcmeLabsMovieDBPublicRouteTableIDParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AcmeLabs/MovieDB/PublicRouteTable/ID
+      Type: String
+      Value: !Ref AcmeLabsMovieDBPublicRouteTable
+
+  AcmeLabsMovieDBPublicRouteTableArnParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AcmeLabs/MovieDB/PublicRouteTable/ARN
+      Type: String
+      Value: !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:route-table/${AcmeLabsMovieDBPublicRouteTable}
+
+  AcmeLabsMovieDBLambdaBucketNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AcmeLabs/MovieDB/S3/Bucket/Name
+      Type: String
+      Value: !Ref AcmeLabsMovieDBLambdaBucket
+
+  AcmeLabsMovieDBLambdaBucketArnParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AcmeLabs/MovieDB/S3/Bucket/ARN
+      Type: String
+      Value: !Sub arn:aws:s3:::${AcmeLabsMovieDBLambdaBucket}
+
+Outputs:
+  VPCID:
+    Description: "VPC ID"
+    Value: !Ref AcmeLabsMovieDBVPC
+
+  VPCARN:
+    Description: "VPC ARN"
+    Value: !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${AcmeLabsMovieDBVPC}
+
+  InternetGatewayID:
+    Description: "Internet Gateway ID"
+    Value: !Ref AcmeLabsMovieDBInternetGateway
+
+  PublicSubnetID:
+    Description: "Public Subnet ID"
+    Value: !Ref AcmeLabsMovieDBPublicSubnet
+
+  PublicSubnetARN:
+    Description: "Public Subnet ARN"
+    Value: !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${AcmeLabsMovieDBPublicSubnet}
+
+  MovieTableID:
+    Description: "DynamoDB Table ID"
+    Value: !Ref AcmeLabsMovieDBTable
+
+  MovieTableARN:
+    Description: "DynamoDB Table ARN"
+    Value: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/TopMovies
+
+  EC2SecurityGroupID:
+    Description: "EC2 Security Group ID"
+    Value: !Ref AcmeLabsMovieDBEC2SecurityGroup
+
+  EC2InstanceID:
+    Description: "EC2 Instance ID"
+    Value: !Ref AcmeLabsMovieDBInstance
+
+  EC2InstanceARN:
+    Description: "EC2 Instance ARN"
+    Value: !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${AcmeLabsMovieDBInstance}
+
+  S3BucketName:
+    Description: "S3 Bucket for Lambda Code"
+    Value: !Ref AcmeLabsMovieDBLambdaBucket
+
+  S3BucketARN:
+    Description: "S3 Bucket ARN for Lambda Code"
+    Value: !Sub arn:aws:s3:::${AcmeLabsMovieDBLambdaBucket}
