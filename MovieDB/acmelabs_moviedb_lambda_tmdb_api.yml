@@ -12,11 +12,6 @@ Parameters:
     Default: arn:aws:secretsmanager:us-east-1:047719623795:secret:AcmeLabsMovieDBTMDBKey-unhVqq
     Description: "The ARN of the TMDB API Key secret."
 
-  AcmeLabsMovieDBOMDBKeyARN:
-    Type: String
-    Default: arn:aws:secretsmanager:us-east-1:047719623795:secret:AcmeLabsMovieDBOMDBKey-8KjMhX
-    Description: "The ARN of the OMDB API Key secret."
-
 Resources:
 
   AcmeLabsMovieDBTMDBApiLambdaRole:
