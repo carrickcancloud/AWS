@@ -1,0 +1,195 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "IAM Role & Instance Profile for EC2 instances.",
+  "Parameters": {
+    "BlogInstanceProfileName": {
+      "Default": "AcmeLabsBlogEC2InstanceProfile",
+      "Type": "String",
+      "Description": "The name of the IAM instance profile."
+    },
+    "BlogEC2AccessRoleName": {
+      "Default": "AcmeLabsBlogEC2AccessRole",
+      "Type": "String",
+      "Description": "The name of the IAM role for EC2 instance access to AWS services via CLI."
+    },
+    "BlogS3BucketName": {
+      "Type": "AWS::SSM::Parameter::Value<String>",
+      "Default": "/AcmeLabs/Blog/Ami/S3/Bucket/Name",
+      "Description": "The name of the S3 bucket retrieved from SSM."
+    }
+  },
+  "Resources": {
+    "EC2AccessRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": {
+          "Ref": "BlogEC2AccessRoleName"
+        },
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "EC2AccessPolicy",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeInstanceStatus",
+                    "ec2:ModifyInstanceMetadataOptions",
+                    "ec2:TerminateInstances",
+                    "ec2:CreateTags",
+                    "ec2:CreateImage",
+                    "ec2:DescribeImages",
+                    "s3:ListBucket",
+                    "s3:HeadObject",
+                    "s3:GetObject",
+                    "s3:PutObject",
+                    "ssm:GetParameter",
+                    "ssm:PutParameter",
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:DescribeSecret"
+                  ],
+                  "Resource": [
+                    "*",
+                    {
+                      "Fn::Sub": "arn:aws:s3:::${BlogS3BucketName}"
+                    },
+                    {
+                      "Fn::Sub": "arn:aws:s3:::${BlogS3BucketName}/*"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "AcmeLabs-Blog-EC2AccessRole"
+          }
+        ]
+      }
+    },
+    "EC2InstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "InstanceProfileName": {
+          "Ref": "BlogInstanceProfileName"
+        },
+        "Roles": [
+          {
+            "Ref": "EC2AccessRole"
+          }
+        ]
+      }
+    },
+    "SSMBlogInstanceProfileName": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Iam/Ec2/Role/InstanceProfile/Name",
+        "Type": "String",
+        "Value": {
+          "Ref": "BlogInstanceProfileName"
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogInstanceProfileArn": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Iam/Ec2/Role/InstanceProfile/Arn",
+        "Type": "String",
+        "Value": {
+          "Fn::GetAtt": [
+            "EC2InstanceProfile",
+            "Arn"
+          ]
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogEC2AccessRoleArn": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Iam/Ec2/Role/EC2AccessRole/Arn",
+        "Type": "String",
+        "Value": {
+          "Fn::GetAtt": [
+            "EC2AccessRole",
+            "Arn"
+          ]
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogEC2AccessRoleId": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Iam/Ec2/Role/EC2AccessRole/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "EC2AccessRole"
+        },
+        "Tier": "Standard"
+      }
+    }
+  },
+  "Outputs": {
+    "BlogInstanceProfileName": {
+      "Description": "The name of the IAM instance profile.",
+      "Value": {
+        "Ref": "BlogInstanceProfileName"
+      },
+      "Export": {
+        "Name": "BlogEC2InstanceProfile"
+      }
+    },
+    "BlogInstanceProfileArn": {
+      "Description": "The ARN of the IAM instance profile.",
+      "Value": {
+        "Fn::GetAtt": [
+          "EC2InstanceProfile",
+          "Arn"
+        ]
+      },
+      "Export": {
+        "Name": "BlogInstanceProfileArnUnique"
+      }
+    },
+    "BlogEC2AccessRoleArn": {
+      "Description": "The ARN of the IAM role for EC2 access.",
+      "Value": {
+        "Fn::GetAtt": [
+          "EC2AccessRole",
+          "Arn"
+        ]
+      },
+      "Export": {
+        "Name": "BlogEC2AccessRoleArnUnique"
+      }
+    },
+    "BlogEC2AccessRoleId": {
+      "Description": "The ID of the IAM role for EC2 access.",
+      "Value": {
+        "Ref": "EC2AccessRole"
+      },
+      "Export": {
+        "Name": "BlogEC2AccessRoleIdUnique"
+      }
+    }
+  }
+}

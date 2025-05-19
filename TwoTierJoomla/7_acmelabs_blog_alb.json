@@ -1,0 +1,206 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Create an Application Load Balancer (ALB) with target group for EC2 instances.",
+  "Parameters": {
+    "BlogPublicSubnet1Id": {
+      "Default": "/AcmeLabs/Blog/Vpc/PublicSubnet1/Id",
+      "Type": "AWS::SSM::Parameter::Value<String>",
+      "Description": "The ID of the first public subnet where the ALB will be launched."
+    },
+    "BlogPublicSubnet2Id": {
+      "Default": "/AcmeLabs/Blog/Vpc/PublicSubnet2/Id",
+      "Type": "AWS::SSM::Parameter::Value<String>",
+      "Description": "The ID of the second public subnet where the ALB will be launched."
+    },
+    "BlogParameterAMI": {
+      "Default": "/AcmeLabs/Blog/Ami/Ubuntu24.x/Latest/Id",
+      "Type": "AWS::SSM::Parameter::Value<String>",
+      "Description": "SSM parameter name for the AMI ID."
+    },
+    "BlogSecurityGroupId": {
+      "Default": "/AcmeLabs/Blog/Vpc/AlbSecurityGroup/Id",
+      "Type": "AWS::SSM::Parameter::Value<String>",
+      "Description": "SSM parameter name for the ALB Security Group ID."
+    }
+  },
+  "Resources": {
+    "SSLCertificate": {
+      "Type": "AWS::CertificateManager::Certificate",
+      "Properties": {
+        "DomainName": "blog.acmelabs.cloud",
+        "ValidationMethod": "DNS"
+      }
+    },
+    "ALB": {
+      "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "Properties": {
+        "Name": "AcmeLabs-Blog-ALB",
+        "Subnets": [
+          {
+            "Ref": "BlogPublicSubnet1Id"
+          },
+          {
+            "Ref": "BlogPublicSubnet2Id"
+          }
+        ],
+        "SecurityGroups": [
+          {
+            "Fn::Sub": "{{resolve:ssm:/AcmeLabs/Blog/Vpc/AlbSecurityGroup/Id}}"
+          }
+        ],
+        "Scheme": "internet-facing"
+      }
+    },
+    "ALBTargetGroup": {
+      "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "Properties": {
+        "Name": "AcmeLabs-Blog-TG",
+        "Port": 80,
+        "Protocol": "HTTP",
+        "VpcId": {
+          "Fn::ImportValue": "BlogVPCId"
+        },
+        "HealthCheckProtocol": "HTTP",
+        "HealthCheckPort": "80",
+        "HealthCheckPath": "/health",
+        "HealthCheckIntervalSeconds": 30,
+        "HealthCheckTimeoutSeconds": 5,
+        "HealthyThresholdCount": 2,
+        "UnhealthyThresholdCount": 2,
+        "Matcher": {
+          "HttpCode": "200"
+        }
+      }
+    },
+    "ALBListenerHTTP": {
+      "Type": "AWS::ElasticLoadBalancingV2::Listener",
+      "Properties": {
+        "LoadBalancerArn": {
+          "Ref": "ALB"
+        },
+        "Port": 80,
+        "Protocol": "HTTP",
+        "DefaultActions": [
+          {
+            "Type": "redirect",
+            "RedirectConfig": {
+              "Protocol": "HTTPS",
+              "Port": "443",
+              "Host": "#{host}",
+              "Path": "/",
+              "Query": "#{query}",
+              "StatusCode": "HTTP_301"
+            }
+          }
+        ]
+      }
+    },
+    "ALBListenerHTTPS": {
+      "Type": "AWS::ElasticLoadBalancingV2::Listener",
+      "Properties": {
+        "LoadBalancerArn": {
+          "Ref": "ALB"
+        },
+        "Port": 443,
+        "Protocol": "HTTPS",
+        "Certificates": [
+          {
+            "CertificateArn": {
+              "Ref": "SSLCertificate"
+            }
+          }
+        ],
+        "DefaultActions": [
+          {
+            "Type": "forward",
+            "TargetGroupArn": {
+              "Ref": "ALBTargetGroup"
+            }
+          }
+        ]
+      }
+    },
+    "SSMBlogALBId": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Alb/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "ALB"
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogALBDnsEndpoint": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Alb/Dns/Name",
+        "Type": "String",
+        "Value": {
+          "Fn::GetAtt": [
+            "ALB",
+            "DNSName"
+          ]
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogTargetGroupId": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Alb/TargetGroup/Id",
+        "Type": "String",
+        "Value": {
+          "Ref": "ALBTargetGroup"
+        },
+        "Tier": "Standard"
+      }
+    },
+    "SSMBlogTargetGroupArn": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Name": "/AcmeLabs/Blog/Alb/TargetGroup/Arn",
+        "Type": "String",
+        "Value": {
+          "Fn::GetAtt": [
+            "ALBTargetGroup",
+            "TargetGroupArn"
+          ]
+        },
+        "Tier": "Standard"
+      }
+    }
+  },
+  "Outputs": {
+    "ALBEndpoint": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ALB",
+          "DNSName"
+        ]
+      },
+      "Description": "The DNS name of the ALB."
+    },
+    "ALBId": {
+      "Value": {
+        "Ref": "ALB"
+      },
+      "Description": "The ID of the created ALB."
+    },
+    "TargetGroupId": {
+      "Value": {
+        "Ref": "ALBTargetGroup"
+      },
+      "Description": "The ID of the created Target Group."
+    },
+    "TargetGroupArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ALBTargetGroup",
+          "TargetGroupArn"
+        ]
+      },
+      "Description": "The ARN of the created Target Group."
+    }
+  }
+}

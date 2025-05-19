@@ -1,0 +1,156 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Launch an EC2 instance.",
+  "Parameters": {
+    "BlogInstanceType": {
+      "Default": "t2.micro",
+      "Type": "String",
+      "Description": "EC2 instance type."
+    },
+    "BlogParameterAMI": {
+      "Default": "/AcmeLabs/Blog/Ami/Ubuntu24.x/Latest/Id",
+      "Type": "AWS::SSM::Parameter::Value<String>",
+      "Description": "SSM parameter name for the AMI ID."
+    },
+    "BlogParameterKeyPair": {
+      "Default": "/AcmeLabs/Blog/KeyPair/Name",
+      "Type": "AWS::SSM::Parameter::Value<String>",
+      "Description": "SSM parameter name for the Key Pair."
+    },
+    "BlogPublicSubnetId": {
+      "Default": "/AcmeLabs/Blog/Vpc/PublicSubnet2/Id",
+      "Type": "AWS::SSM::Parameter::Value<String>",
+      "Description": "The ID of the public subnet where the EC2 instance will be launched."
+    },
+    "BlogSecurityGroupId": {
+      "Default": "/AcmeLabs/Blog/Vpc/Ec2SecurityGroup/Id",
+      "Type": "AWS::SSM::Parameter::Value<String>",
+      "Description": "SSM parameter name for the Security Group ID."
+    },
+    "BlogVpcId": {
+      "Default": "/AcmeLabs/Blog/Vpc/Id",
+      "Type": "AWS::SSM::Parameter::Value<String>",
+      "Description": "The ID of the VPC where the resources will be created."
+    },
+    "BlogS3Bucket": {
+      "Default": "/AcmeLabs/Blog/Ami/S3/Bucket/Name",
+      "Type": "AWS::SSM::Parameter::Value<String>",
+      "Description": "S3 bucket name for startup script."
+    }
+  },
+  "Resources": {
+    "EC2Instance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash\n",
+                "exec > /var/log/user-data.log 2>&1\n",
+                "\n",
+                "echo \"Starting User-Data script...\"\n",
+                "echo \"Checking internet connectivity...\"\n",
+                "for i in {1..10}; do\n",
+                "    if curl -s --head --request GET http://www.google.com | grep \"200 OK\" > /dev/null; then\n",
+                "        echo \"Internet is available.\"\n",
+                "        break\n",
+                "    fi\n",
+                "    echo \"Waiting for internet connectivity...\"\n",
+                "    sleep 10\n",
+                "done\n",
+                "\n",
+                "echo \"Updating packages and installing dependencies...\"\n",
+                "apt-get update\n",
+                "apt-get install -y unzip jq\n",
+                "curl \"https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip\" -o \"/tmp/awscliv2.zip\"\n",
+                "unzip /tmp/awscliv2.zip -d /tmp\n",
+                "/tmp/aws/install\n",
+                "rm -rf /tmp/aws /tmp/awscliv2.zip\n",
+                "echo \"Packages updated and dependencies installed.\"\n",
+                "\n",
+                "echo \"Retrieving instance ID using IMDSv2...\"\n",
+                "TOKEN=$(curl -X PUT -H \"X-aws-ec2-metadata-token-ttl-seconds: 21600\" -s http://169.254.169.254/latest/api/token)\n",
+                "INSTANCE_ID=$(curl -s -H \"X-aws-ec2-metadata-token: $TOKEN\" http://169.254.169.254/latest/meta-data/instance-id)\n",
+                "if [ -z \"$INSTANCE_ID\" ]; then\n",
+                "  echo \"Failed to retrieve INSTANCE_ID\"\n",
+                "  exit 1\n",
+                "fi\n",
+                "echo \"Instance ID: $INSTANCE_ID\"\n",
+                "\n",
+                "echo \"Setting up global variables...\"\n",
+                "BUCKET_NAME=$(aws ssm get-parameter --name \"/AcmeLabs/Blog/Ami/S3/Bucket/Name\" --query \"Parameter.Value\" --output text)\n",
+                "if [ -z \"$BUCKET_NAME\" ]; then\n",
+                "  echo \"Failed to retrieve BUCKET_NAME\"\n",
+                "  exit 1\n",
+                "fi\n",
+                "echo \"Bucket Name: $BUCKET_NAME\"\n",
+                "echo \"Global variables set.\"\n",
+                "\n",
+                "aws s3 cp s3://${BUCKET_NAME}/scripts/source-startup-script.sh /tmp/startup-script.sh\n",
+                "chmod +x /tmp/startup-script.sh\n",
+                "echo \"User-Data script completed successfully.\"\n",
+                "echo \"Executing startup script...\"\n",
+                "\n",
+                "if [ -f /tmp/startup-script.sh ]; then\n",
+                "    /tmp/startup-script.sh\n",
+                "    echo \"Startup script executed successfully.\"\n",
+                "else\n",
+                "    echo \"Startup script not found at /tmp/startup-script.sh\"\n",
+                "    exit 1\n",
+                "fi\n"
+              ]
+            ]
+          }
+        },
+        "KeyName": {
+          "Fn::Sub": "{{resolve:ssm:/AcmeLabs/Blog/KeyPair/Name}}"
+        },
+        "IamInstanceProfile": {
+          "Fn::ImportValue": "BlogEC2InstanceProfile"
+        },
+        "ImageId": {
+          "Fn::Sub": "{{resolve:ssm:/AcmeLabs/Blog/Ami/Ubuntu24.x/Latest/Id}}"
+        },
+        "NetworkInterfaces": [
+          {
+            "AssociatePublicIpAddress": true,
+            "DeviceIndex": "0",
+            "SubnetId": {
+              "Ref": "BlogPublicSubnetId"
+            },
+            "GroupSet": [
+              {
+                "Fn::Sub": "{{resolve:ssm:/AcmeLabs/Blog/Vpc/Ec2SecurityGroup/Id}}"
+              }
+            ]
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "AcmeLabs-Blog-Source"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "BlogInstanceId": {
+      "Value": {
+        "Ref": "EC2Instance"
+      },
+      "Description": "The ID of the launched EC2 instance."
+    },
+    "BlogInstancePublicIP": {
+      "Value": {
+        "Fn::GetAtt": [
+          "EC2Instance",
+          "PublicIp"
+        ]
+      },
+      "Description": "The public IP address of the launched EC2 instance."
+    }
+  }
+}
