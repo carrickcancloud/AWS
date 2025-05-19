@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template to deploy the AcmeLabsMovieDBScraper Lambda function with necessary IAM role and a scheduled trigger.
+
+Parameters:
+  AcmeLabsMovieDBS3BucketName:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /AcmeLabs/MovieDB/S3/Bucket/Name
+    Description: "The name of the S3 bucket containing the Lambda ZIP file."
+
+  AcmeLabsMovieDBTMDBKeyARN:
+    Type: String
+    Default: arn:aws:secretsmanager:us-east-1:047719623795:secret:AcmeLabsMovieDBTMDBKey-unhVqq
+    Description: "The ARN of the TMDB API Key secret."
+
+Resources:
+
+  AcmeLabsMovieDBTMDBApiLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AcmeLabsMovieDBTMDBApiLambdaRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AcmeLabsMovieDBLambdaDynamoDBAndS3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:Scan
+                Resource: arn:aws:dynamodb:*:*:table/TopMovies
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub arn:aws:s3:::${AcmeLabsMovieDBS3BucketName}
+                  - !Sub arn:aws:s3:::${AcmeLabsMovieDBS3BucketName}/*
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref AcmeLabsMovieDBTMDBKeyARN
+                  - !Ref AcmeLabsMovieDBOMDBKeyARN
+              - Effect: Allow
+                Action:
+                  - events:PutTargets
+                  - events:PutRule
+                  - events:RemoveTargets
+                  - events:DeleteRule
+                Resource: "*"
+      Tags:
+        - Key: Name
+          Value: AcmeLabsMovieDBTMDBApiLambdaRole
+
+  AcmeLabsMovieDBScraper:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: AcmeLabsMovieDBScraper
+      Handler: TmdbApiRetriever.handler
+      Role: !GetAtt AcmeLabsMovieDBTMDBApiLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref AcmeLabsMovieDBS3BucketName
+        S3Key: TmdbApiRetriever.zip
+      Runtime: python3.13
+      MemorySize: 128
+      Timeout: 30
+
+  AcmeLabsMovieDBScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      ScheduleExpression: "cron(0 0 * * ? *)"
+      Targets:
+        - Arn: !GetAtt AcmeLabsMovieDBScraper.Arn
+          Id: "AcmeLabsMovieDBScraperTarget"
+          RoleArn: !GetAtt AcmeLabsMovieDBTMDBApiLambdaRole.Arn
+
+  AcmeLabsMovieDBPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AcmeLabsMovieDBScraper
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt AcmeLabsMovieDBScheduleRule.Arn
+
+Outputs:
+  AcmeLabsMovieDBLambdaFunctionArn:
+    Description: "ARN of the AcmeLabsMovieDBScraper Lambda Function"
+    Value: !GetAtt AcmeLabsMovieDBScraper.Arn
+
+  AcmeLabsMovieDBTMDBApiLambdaRoleArn:
+    Description: "ARN of the IAM Role for Lambda"
+    Value: !GetAtt AcmeLabsMovieDBTMDBApiLambdaRole.Arn
